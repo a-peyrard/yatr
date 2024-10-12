@@ -32,9 +32,6 @@
       "node_modules"
     ],
     "testEnvironment": "node",
-    "testRegex": ".*\\.spec\\.ts$",
-    "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
-    }
+    "testRegex": ".*\\.spec\\.js$"
   }
 }

@@ -30,6 +30,26 @@ global.afterEach = function (fn) {
 
 global.expect = expect;
 
-const path = process.argv[2];  // Pass the test file as an argument
-// require('ts-node').register(); // For TypeScript, otherwise skip this line
-require(path);
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: false
+});
+
+let number_of_tests = 0;
+rl.on('line', (filePath) => {
+    if (number_of_tests === 0) {
+        console.time('100 tests');
+    }
+    // Run the spec file received via stdin
+    console.log(`Running test file: ${filePath}`);
+    require(filePath);
+
+    console.log(`Finished running: ${filePath}`);
+
+    number_of_tests++;
+    if (number_of_tests === 100) {
+        console.timeEnd('100 tests');
+        process.exit(0);
+    }
+});

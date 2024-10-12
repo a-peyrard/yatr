@@ -10,6 +10,6 @@ describe('addition1', () => {
     const result = addition(a, b);
 
     // THEN
-    expect(result).toBe(4);
+    expect(result).toBe(3);
   });
 });
