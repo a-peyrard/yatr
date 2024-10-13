@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"sync"
+	"time"
 )
 
 var SpecRegex = regexp.MustCompile(`\.spec\.js$`)
@@ -14,10 +15,13 @@ var SpecRegex = regexp.MustCompile(`\.spec\.js$`)
 func findSpecs(numberOfWorkers int, path string) error {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
-	specChan := make(chan string)
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go specListener(ctx, numberOfWorkers, specChan, &wg)
+	specChan := make(chan string, numberOfWorkers)
+	var wg sync.WaitGroup
+
+	for i := 0; i < numberOfWorkers; i++ {
+		wg.Add(1)
+		go worker(ctx, i+1, specChan, &wg)
+	}
 
 	err := filepath.WalkDir(path, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -28,44 +32,10 @@ func findSpecs(numberOfWorkers int, path string) error {
 		}
 		return nil
 	})
-	cancelFunc()
+	close(specChan)
 	wg.Wait()
+	cancelFunc()
 	return err
-}
-
-func specListener(ctx context.Context, numberOfWorkers int, specChan <-chan string, specListenerWg *sync.WaitGroup) {
-	workerChan := make(chan string, numberOfWorkers)
-	var wg sync.WaitGroup
-
-	for i := 0; i < numberOfWorkers; i++ {
-		wg.Add(1)
-		go worker(ctx, i+1, workerChan, &wg)
-	}
-
-	buffer := make([]string, 0)
-	for {
-		if len(buffer) == 0 {
-			select {
-			case <-ctx.Done():
-				wg.Wait()
-				specListenerWg.Done()
-				return
-			case spec := <-specChan:
-				buffer = append(buffer, spec)
-			}
-		} else {
-			select {
-			case <-ctx.Done():
-				wg.Wait()
-				specListenerWg.Done()
-				return
-			case spec := <-specChan:
-				buffer = append(buffer, spec)
-			case workerChan <- buffer[0]:
-				buffer = buffer[1:]
-			}
-		}
-	}
 }
 
 func worker(ctx context.Context, idx int, workerChan <-chan string, wg *sync.WaitGroup) {
@@ -75,7 +45,12 @@ func worker(ctx context.Context, idx int, workerChan <-chan string, wg *sync.Wai
 		case <-ctx.Done():
 			println("worker", idx, "done")
 			return
-		case spec := <-workerChan:
+		case spec, ok := <-workerChan:
+			if !ok {
+				println("worker", idx, "done")
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
 			println("worker", idx, "working on", spec)
 		}
 	}
