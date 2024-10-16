@@ -11,6 +11,10 @@ global.describe = function (name, fn) {
 global.it = function (name, fn) {
     try {
         console.log(`Running test case: ${name}`);
+
+        // fixme
+        //sleepSync(Math.floor(Math.random() * 100) + 1);  // Simulate a slow test case
+        // fixme
         fn();  // Run the actual test function
         console.log(`Test case passed: ${name}`);
     } catch (error) {
@@ -30,26 +34,26 @@ global.afterEach = function (fn) {
 
 global.expect = expect;
 
+console.log('Almost ready to accept spec files...');
+
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     terminal: false
 });
 
-let number_of_tests = 0;
 rl.on('line', (filePath) => {
-    if (number_of_tests === 0) {
-        console.time('100 tests');
-    }
     // Run the spec file received via stdin
     console.log(`Running test file: ${filePath}`);
     require(filePath);
 
     console.log(`Finished running: ${filePath}`);
-
-    number_of_tests++;
-    if (number_of_tests === 100) {
-        console.timeEnd('100 tests');
-        process.exit(0);
-    }
 });
+
+// fixme...
+function sleepSync(milliseconds) {
+    const start = Date.now();
+    while (Date.now() - start < milliseconds) {
+        // Busy-wait: Do nothing
+    }
+}

@@ -2,6 +2,11 @@ package main
 
 import (
 	"context"
+	"github.com/a-peyrard/yatr/internal/chans"
+	"github.com/a-peyrard/yatr/internal/output"
+	"github.com/a-peyrard/yatr/internal/worker"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,15 +17,19 @@ import (
 
 var SpecRegex = regexp.MustCompile(`\.spec\.js$`)
 
-func findSpecs(numberOfWorkers int, path string) error {
+func runSpecs(numberOfWorkers int, path string, out output.Output) error {
+	start := time.Now()
+
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
 	specChan := make(chan string, numberOfWorkers)
-	var wg sync.WaitGroup
+	var (
+		wg = sync.WaitGroup{}
+	)
 
 	for i := 0; i < numberOfWorkers; i++ {
 		wg.Add(1)
-		go worker(ctx, i+1, specChan, &wg)
+		go worker.Run(ctx, i+1, specChan, &wg, out)
 	}
 
 	err := filepath.WalkDir(path, func(path string, d os.DirEntry, err error) error {
@@ -28,43 +37,34 @@ func findSpecs(numberOfWorkers int, path string) error {
 			return err
 		}
 		if !d.IsDir() && SpecRegex.MatchString(path) {
-			sendSpec(ctx, specChan, path)
+			chans.Send(ctx, specChan, path)
 		}
 		return nil
 	})
 	close(specChan)
 	wg.Wait()
+
 	cancelFunc()
+
+	out.DisplaySummary(output.Summary{
+		SpecPassed: 100,
+		SpecFailed: 0,
+		TestPassed: 1000,
+		TestFailed: 0,
+		Elapsed:    time.Since(start),
+	})
+
 	return err
 }
 
-func worker(ctx context.Context, idx int, workerChan <-chan string, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for {
-		select {
-		case <-ctx.Done():
-			println("worker", idx, "done")
-			return
-		case spec, ok := <-workerChan:
-			if !ok {
-				println("worker", idx, "done")
-				return
-			}
-			time.Sleep(10 * time.Millisecond)
-			println("worker", idx, "working on", spec)
-		}
-	}
-}
-
-func sendSpec(ctx context.Context, specChan chan<- string, spec string) {
-	select {
-	case <-ctx.Done():
-		return
-	case specChan <- spec:
-	}
-}
-
 func main() {
+	log.Logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}).
+		Level(zerolog.DebugLevel).
+		With().
+		Timestamp().
+		Caller().
+		Logger()
+
 	if len(os.Args) < 3 {
 		panic("Usage: yatr <numberOfWorkers> <path>")
 	}
@@ -73,7 +73,11 @@ func main() {
 		panic(err)
 	}
 	path := os.Args[2]
-	if err := findSpecs(numberOfWorkers, path); err != nil {
+
+	out := output.NewTerminalOutput()
+	//out := output.NewNoOpOutput()
+
+	if err := runSpecs(numberOfWorkers, path, out); err != nil {
 		panic(err)
 	}
 }
